@@ -22,11 +22,12 @@ export default function App() {
     setError(null);
     setResult(null);
     setCurrentPrompt(prompt);
-    const toastId = toast.loading('Generating architecture design...');
+    const toastId = toast.loading('Generating architecture...');
     try {
       const response = await generateArchitecture(prompt);
       if (!response?.success || !response?.data) throw new Error('Invalid response from server.');
-      setResult(response.data);
+      const architectureData = response.data?.architectural_pattern ? response.data : response.data;
+      setResult(architectureData);
       const updated = saveToHistory(prompt, response);
       setHistory(updated);
       toast.success('Architecture generated!', { id: toastId });
@@ -39,7 +40,9 @@ export default function App() {
     }
   }, []);
 
-  const handleReset = useCallback(() => { setResult(null); setError(null); setCurrentPrompt(''); }, []);
+  const handleReset = useCallback(() => {
+    setResult(null); setError(null); setCurrentPrompt(''); setSearchQuery('');
+  }, []);
 
   const handleHistorySelect = useCallback((item) => {
     setCurrentPrompt(item.prompt);
@@ -48,7 +51,9 @@ export default function App() {
     toast('Loaded from history', { icon: '🕐' });
   }, []);
 
-  const handleClearHistory = useCallback(() => { clearHistory(); setHistory([]); toast.success('History cleared'); }, []);
+  const handleClearHistory = useCallback(() => {
+    clearHistory(); setHistory([]); toast.success('History cleared');
+  }, []);
 
   const filteredResult = result && searchQuery.trim()
     ? {
@@ -66,66 +71,143 @@ export default function App() {
     : result;
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: isDark ? '#030712' : '#f8fafc' }}>
-      <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
+    <div style={{ minHeight: '100vh', position: 'relative', backgroundColor: 'var(--bg-base)', color: 'var(--text-primary)', transition: 'all 0.4s ease' }}>
 
-      {/* Header */}
+      {/* Background mesh */}
+      <div className="bg-mesh" />
+
+      <Toaster position="top-right" toastOptions={{
+        style: { background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)' }
+      }} />
+
+      {/* ── Header ── */}
       <header style={{
-        position: 'sticky', top: 0, zIndex: 50,
-        background: isDark ? 'rgba(17,24,39,0.85)' : 'rgba(255,255,255,0.85)',
-        backdropFilter: 'blur(12px)',
-        borderBottom: `1px solid ${isDark ? '#1f2937' : '#e2e8f0'}`
+        position: 'sticky', top: 0, zIndex: 100,
+        background: 'var(--header-bg)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderBottom: '1px solid var(--border)',
+        transition: 'all 0.4s ease',
       }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 1.5rem', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 36, height: 36, background: 'linear-gradient(135deg,#6366f1,#a855f7)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 18 }}>⚗️</span>
-            </div>
+        <div style={{ maxWidth: 1140, margin: '0 auto', padding: '0 24px', height: 68, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+
+          {/* Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{
+              width: 42, height: 42,
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #06b6d4)',
+              borderRadius: 14,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 20,
+              boxShadow: '0 0 20px rgba(99,102,241,0.4)',
+            }} className="animate-float">⚗️</div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 15, color: isDark ? '#f1f5f9' : '#0f172a' }}>AI Architecture Workbench</div>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>Software Architecture Design Assistant</div>
+              <div style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.02em' }}>
+                <span className="gradient-text">AI Architecture</span>
+                <span style={{ color: 'var(--text-primary)' }}> Workbench</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                Software Design Assistant
+              </div>
             </div>
           </div>
+
+          {/* Right */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94a3b8' }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: isLoading ? '#facc15' : result ? '#4ade80' : '#94a3b8', animation: isLoading ? 'pulse 1s infinite' : 'none' }} />
-              {isLoading ? 'Processing...' : result ? 'Ready' : 'Idle'}
+            {/* Status pill */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 14px',
+              background: 'var(--status-bg)',
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+            }}>
+              <div className="glow-dot animate-pulse" style={{
+                background: isLoading ? '#facc15' : result ? '#4ade80' : 'var(--text-faint)',
+                color:      isLoading ? '#facc15' : result ? '#4ade80' : 'var(--text-faint)',
+              }} />
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                {isLoading ? 'Processing' : result ? 'Ready' : 'Idle'}
+              </span>
             </div>
-            <button onClick={() => setIsDark(!isDark)} style={{ width: 36, height: 36, borderRadius: 10, border: 'none', cursor: 'pointer', background: isDark ? '#1f2937' : '#f1f5f9', fontSize: 16 }}>
+
+            {/* Theme toggle */}
+            <button
+              onClick={() => setIsDark(!isDark)}
+              title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              style={{
+                width: 42, height: 42, borderRadius: 12,
+                background: 'var(--status-bg)',
+                border: '1px solid var(--border)',
+                cursor: 'pointer', fontSize: 18,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.2s',
+              }}
+            >
               {isDark ? '☀️' : '🌙'}
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main */}
-      <main style={{ maxWidth: 1100, margin: '0 auto', padding: '2rem 1.5rem' }}>
+      {/* ── Main ── */}
+      <main style={{ maxWidth: 1140, margin: '0 auto', padding: '48px 24px', position: 'relative', zIndex: 1 }}>
+
+        {/* Hero */}
         {!result && !isLoading && (
-          <div className="animate-fade-in" style={{ textAlign: 'center', padding: '2rem 0' }}>
-            <h2 style={{ fontSize: 36, fontWeight: 800, color: isDark ? '#f1f5f9' : '#0f172a', marginBottom: 12 }}>
-              Design Software Architecture{' '}
-              <span style={{ background: 'linear-gradient(90deg,#6366f1,#a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>with AI</span>
-            </h2>
-            <p style={{ color: '#94a3b8', maxWidth: 520, margin: '0 auto', fontSize: 15 }}>
-              Describe your system requirements and get a complete architectural design with components, patterns, and rationale.
+          <div className="animate-fade-in" style={{ textAlign: 'center', marginBottom: 56 }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '6px 16px', borderRadius: 9999,
+              background: 'var(--tag-bg)',
+              border: '1px solid var(--chip-border)',
+              fontSize: 12, color: 'var(--tag-text)', fontWeight: 600,
+              marginBottom: 24, letterSpacing: '0.05em', textTransform: 'uppercase',
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 6px #6366f1', display: 'inline-block' }} />
+              Powered by AI
+            </div>
+
+            <h1 style={{ fontSize: 52, fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.03em', marginBottom: 20, color: 'var(--text-primary)' }}>
+              Design Software<br />
+              <span className="gradient-text">Architecture with AI</span>
+            </h1>
+
+            <p style={{ fontSize: 17, color: 'var(--text-secondary)', maxWidth: 560, margin: '0 auto', lineHeight: 1.7 }}>
+              Describe your system requirements and instantly get a complete architectural design with components, patterns, diagrams, and rationale.
             </p>
+
+            {/* Stats */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 48, marginTop: 40 }}>
+              {[
+                { label: 'Patterns Supported', value: '10+' },
+                { label: 'Components Generated', value: 'Auto' },
+                { label: 'Response Time', value: '< 5s' },
+              ].map((stat, i) => (
+                <div key={i} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: '#6366f1' }}>{stat.value}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{stat.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
           <InputForm onSubmit={handleSubmit} isLoading={isLoading} onReset={handleReset} hasResult={!!result} />
 
           {!isLoading && !result && (
             <HistoryPanel history={history} onSelect={handleHistorySelect} onClear={handleClearHistory} />
           )}
 
+          {/* Error */}
           {error && !isLoading && (
-            <div className="card animate-slide-up" style={{ borderColor: '#fca5a5', background: isDark ? 'rgba(127,29,29,0.2)' : '#fef2f2' }}>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                <span style={{ fontSize: 20 }}>❌</span>
+            <div className="card animate-scale-in" style={{ borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)' }}>
+              <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239,68,68,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>❌</div>
                 <div>
-                  <div style={{ fontWeight: 600, color: '#dc2626', fontSize: 14 }}>Generation Failed</div>
-                  <div style={{ color: '#ef4444', fontSize: 14, marginTop: 4 }}>{error}</div>
+                  <div style={{ fontWeight: 700, color: '#ef4444', fontSize: 14, marginBottom: 4 }}>Generation Failed</div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{error}</div>
                 </div>
               </div>
             </div>
@@ -133,21 +215,32 @@ export default function App() {
 
           {isLoading && <SkeletonLoader />}
 
+          {/* Search */}
           {result && !isLoading && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }} className="animate-fade-in">
-              <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
-                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 14 }}>🔍</span>
+            <div className="animate-fade-in" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ position: 'relative', flex: 1, maxWidth: 360 }}>
+                <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-muted)' }}>🔍</span>
                 <input
                   type="text"
                   placeholder="Filter components..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="input-field"
-                  style={{ paddingLeft: 36, paddingTop: 8, paddingBottom: 8 }}
+                  style={{ paddingLeft: 44, paddingTop: 10, paddingBottom: 10, borderRadius: 12 }}
                 />
               </div>
-              {searchQuery && <button onClick={() => setSearchQuery('')} className="btn-secondary">Clear</button>}
-              <span style={{ fontSize: 12, color: '#94a3b8' }}>{filteredResult?.architectural_components?.length || 0} components</span>
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="btn-secondary" style={{ fontSize: 12 }}>✕ Clear</button>
+              )}
+              <div style={{
+                fontSize: 12, color: 'var(--text-secondary)',
+                padding: '8px 14px',
+                background: 'var(--status-bg)',
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+              }}>
+                <span style={{ color: '#6366f1', fontWeight: 700 }}>{filteredResult?.architectural_components?.length || 0}</span> components
+              </div>
             </div>
           )}
 
@@ -155,8 +248,16 @@ export default function App() {
         </div>
       </main>
 
-      <footer style={{ marginTop: 64, borderTop: `1px solid ${isDark ? '#1f2937' : '#e2e8f0'}`, padding: '1.5rem', textAlign: 'center', fontSize: 12, color: '#94a3b8' }}>
-        AI Architecture Workbench — Powered by Flask API
+      {/* Footer */}
+      <footer style={{
+        position: 'relative', zIndex: 1,
+        borderTop: '1px solid var(--border)',
+        padding: '24px', textAlign: 'center',
+      }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          <span className="gradient-text" style={{ fontWeight: 700 }}>AI Architecture Workbench</span>
+          <span> — Powered by Flask API & React</span>
+        </div>
       </footer>
     </div>
   );
