@@ -122,7 +122,7 @@ class LLMService:
             architecture = json.loads(response_text)
             
             logger.info("Successfully analyzed requirements using Azure OpenAI")
-            logger.info("Response: ", response_text)
+            logger.debug(f"Response: {response_text}")
             return architecture
             
         except json.JSONDecodeError as e:

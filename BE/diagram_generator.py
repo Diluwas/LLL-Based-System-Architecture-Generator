@@ -6,6 +6,9 @@ Generates visual representations of architecture
 from typing import Dict, Any, Tuple
 # from config import DIAGRAM_CONFIG
 import logging
+import requests
+import zlib
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -21,45 +24,56 @@ class DiagramGenerator:
         # self.style = DIAGRAM_CONFIG['style']
         pass
     
-    def generate_architecture_diagram(self, architecture: Dict[str, Any]) -> Tuple[bytes, str]:
+    def generate_architecture_diagram(self, plantuml_code: str, format: str = "png") -> Dict[str, Any]:
         """
-        Generate architecture diagram from architecture design
+        Generate architecture diagram from PlantUML code and return as base64
         
         Args:
-            architecture: Architecture design containing components and relationships
+            plantuml_code: PlantUML diagram code
+            format: Image format - png, svg, pdf, etc. (default: png)
             
         Returns:
-            Tuple of (diagram_bytes, format) - image data and format type
+            Dict containing:
+                - image: Base64-encoded image data
+                - format: Image format used
+                - mime_type: MIME type of the image
         """
-        # TODO: Implement diagram generation
-        # Could use: graphviz, mermaid, plantuml, or drawing libraries
-        pass
-    
-    def generate_component_diagram(self, components: list) -> Tuple[bytes, str]:
-        """Generate component relationship diagram"""
-        # TODO: Implement component diagram generation
-        pass
-    
-    def generate_dataflow_diagram(self, architecture: Dict[str, Any]) -> Tuple[bytes, str]:
-        """Generate data flow diagram"""
-        # TODO: Implement data flow diagram generation
-        pass
-    
-    def _create_mermaid_definition(self, architecture: Dict[str, Any]) -> str:
-        """Create Mermaid diagram definition"""
-        # TODO: Generate Mermaid syntax for diagram
-        pass
-    
-    def _create_graphviz_definition(self, architecture: Dict[str, Any]) -> str:
-        """Create Graphviz DOT definition"""
-        # TODO: Generate Graphviz syntax for diagram
-        pass
-    
-    def save_diagram(self, diagram_bytes: bytes, filename: str, output_dir: str = './output'):
-        """Save diagram to file"""
-        # TODO: Implement file saving logic
-        pass
+        try:
+            # Compress PlantUML code
+            compressed = zlib.compress(plantuml_code.encode('utf-8'))
+            encoded = base64.b64encode(compressed).decode('utf-8')
 
+            # Call PlantUML server
+            url = f"https://www.plantuml.com/plantuml/{format}/{encoded}"
+            response = requests.get(url)
+            
+            if response.status_code != 200:
+                logger.error(f"PlantUML server returned status code {response.status_code}")
+                raise Exception(f"Failed to generate diagram: HTTP {response.status_code}")
+            
+            # Convert image bytes to base64
+            image_base64 = base64.b64encode(response.content).decode('utf-8')
+            
+            # Determine MIME type
+            mime_types = {
+                'png': 'image/png',
+                'svg': 'image/svg+xml',
+                'pdf': 'application/pdf',
+                'eps': 'application/postscript'
+            }
+            mime_type = mime_types.get(format, 'image/png')
+            
+            logger.info(f"Successfully generated diagram in {format} format")
+            
+            return {
+                "image": image_base64,
+                "format": format,
+                "mime_type": mime_type
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating diagram: {str(e)}")
+            raise
 
 # Singleton instance
 _generator: DiagramGenerator = None

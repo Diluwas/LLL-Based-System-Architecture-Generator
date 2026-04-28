@@ -50,7 +50,12 @@ def process_user_input():
                     "rationale": "reason for selecting this component"
                 },
                 ...
-            ]
+            ],
+            "diagram": {
+                "image": "base64_encoded_image_data",
+                "format": "png",
+                "mime_type": "image/png"
+            }
         }
     }
     """
@@ -72,17 +77,34 @@ def process_user_input():
                 'error': 'user_prompt cannot be empty'
             }), 400
         
-        # TODO: Send prompt to LLM service for analysis
-        # TODO: Parse LLM response to extract architectural pattern, components, and rationale
+        # Analyze requirements using LLM service
         architecture = analyzer.analyze(user_prompt)
+        
+        # Extract PlantUML code from LLM response
+        plantuml_code = architecture.get('architechure_diagram_code', '')
+        
+        # Generate diagram image if PlantUML code is available
+        diagram_data = None
+        if plantuml_code:
+            diagram_data = diagram_gen.generate_architecture_diagram(plantuml_code, format='png')
+        
+        response_data = {
+            'architectural_pattern': architecture.get('pattern', 'unknown'),
+            'architectural_components': architecture.get('components', []),
+            'rationale_for_components': architecture.get('rationale', [])
+        }
+        
+        # Add diagram if available
+        if diagram_data:
+            response_data['diagram'] = {
+                'image': diagram_data['image'],
+                'format': diagram_data['format'],
+                'mime_type': diagram_data['mime_type']
+            }
         
         return jsonify({
             'success': True,
-            'data': {
-                'architectural_pattern': architecture.get('pattern', 'unknown'),
-                'architectural_components': architecture.get('components', []),
-                'rationale_for_components': architecture.get('rationale', [])
-            }
+            'data': response_data
         }), 200
         
     except Exception as e:

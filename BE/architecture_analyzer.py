@@ -39,7 +39,7 @@ class ArchitectureAnalyzer:
             if 'rationale' not in architecture_analysis:
                 architecture_analysis['rationale'] = []
             
-            logger.info(f"Architecture analysis completed. Pattern: {architecture_analysis.get('pattern')}")
+            logger.info(f"Architecture analysis completed. Pattern: {architecture_analysis}")
             return architecture_analysis
             
         except Exception as e:
@@ -51,30 +51,6 @@ class ArchitectureAnalyzer:
                 'rationale': [],
                 'error': str(e)
             }
-    
-    def validate_architecture(self, architecture: Dict[str, Any]) -> bool:
-        """
-        Validate architecture design
-        
-        Args:
-            architecture: Architecture design to validate
-            
-        Returns:
-            True if valid, False otherwise
-        """
-        # TODO: Implement validation logic
-        pass
-    
-    def get_components(self, architecture: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Extract components from architecture"""
-        # TODO: Extract and structure components
-        pass
-    
-    def get_decisions_with_rationale(self, architecture: Dict[str, Any]) -> List[Dict[str, str]]:
-        """Extract decisions with their rationale"""
-        # TODO: Extract decisions and rationale
-        pass
-
 
 # Singleton instance
 _analyzer: ArchitectureAnalyzer = None
