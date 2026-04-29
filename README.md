@@ -22,38 +22,7 @@ An AI-powered system architecture generator that takes a plain-English descripti
 
 ## How It Works
 
-```
-User Prompt
-    │
-    ▼
-React Frontend  ──POST /api/user/input──►  Flask Backend
-                                                │
-                                     ArchitectureAnalyzer
-                                                │
-                                         LLMService (Azure OpenAI)
-                                         • Sends prompt + system instructions
-                                         • Receives structured JSON:
-                                           - pattern & rationale
-                                           - components list
-                                           - connections list
-                                           - D2 diagram code
-                                                │
-                                        DiagramGenerator
-                                         • Calls D2 CLI with generated code
-                                         • Retries automatically if icon
-                                           fetch fails (strips bad URLs)
-                                         • Returns base64-encoded image
-                                                │
-                                    ◄── JSON response ──
-    │
-    ▼
-Result View
- • Architectural pattern + rationale
- • Component cards (name, type, description, rationale)
- • Connection list
- • Rendered SVG/PNG/PDF diagram
- • D2 source code viewer
-```
+![How It Works Architecture Diagram](Architecture.png)
 
 1. **User submits a prompt** — e.g. *"I need a real-time inventory management system for a small shop"*.
 2. **Backend analyzes requirements** via Azure OpenAI (GPT-4o by default). A carefully crafted system prompt instructs the model to return a structured JSON object containing the chosen architecture pattern, component list, connections, and [D2](https://d2lang.com) diagram code.
