@@ -25,21 +25,30 @@ class ArchitectureAnalyzer:
             requirements: User's high-level requirements/prompt
             
         Returns:
-            Comprehensive architecture analysis with pattern, components, and rationale
+            Comprehensive architecture analysis with pattern, components, connections, and rationales
         """
         try:
             # Call LLM service to analyze requirements
             architecture_analysis = self.llm_service.analyze_requirements(requirements)
             
-            # Ensure all required fields are present
+            # Ensure all required fields are present with defaults
             if 'pattern' not in architecture_analysis:
                 architecture_analysis['pattern'] = 'unknown'
+            if 'pattern_rationale' not in architecture_analysis:
+                architecture_analysis['pattern_rationale'] = ''
             if 'components' not in architecture_analysis:
                 architecture_analysis['components'] = []
-            if 'rationale' not in architecture_analysis:
-                architecture_analysis['rationale'] = []
+            if 'connections' not in architecture_analysis:
+                architecture_analysis['connections'] = []
+            if 'architecture_diagram_code' not in architecture_analysis:
+                architecture_analysis['architecture_diagram_code'] = ''
             
-            logger.info(f"Architecture analysis completed. Pattern: {architecture_analysis}")
+            # Ensure each component has rationale field
+            for component in architecture_analysis.get('components', []):
+                if 'rationale' not in component:
+                    component['rationale'] = ''
+            
+            logger.info(f"Architecture analysis completed. Pattern: {architecture_analysis.get('pattern')}")
             return architecture_analysis
             
         except Exception as e:
@@ -47,8 +56,10 @@ class ArchitectureAnalyzer:
             # Return a fallback response in case of error
             return {
                 'pattern': 'unknown',
+                'pattern_rationale': '',
                 'components': [],
-                'rationale': [],
+                'connections': [],
+                'architecture_diagram_code': '',
                 'error': str(e)
             }
 
