@@ -1,162 +1,121 @@
-import { useEffect, useState } from 'react';
-import { deflateRaw } from 'pako';
+import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
+import { Maximize2, Minimize2, Download, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+
+const btnStyle = {
+  display: 'flex', alignItems: 'center', gap: 6,
+  padding: '6px 12px', borderRadius: 8,
+  border: '1px solid #d1d5db', background: '#fff',
+  color: '#374151', fontSize: 12, fontWeight: 600,
+  cursor: 'pointer', transition: 'all 0.15s ease',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+};
 
 /**
- * Correct PlantUML encoding:
- * 1. UTF-8 encode the string
- * 2. deflateRaw compress (no zlib header)
- * 3. Encode with PlantUML custom base64 alphabet
+ * Decode base64 SVG and patch the root <svg> element so it scales
+ * responsively inside the container (width/height → 100%, preserve viewBox).
  */
-const encode6bit = (b) => {
-  if (b < 10) return String.fromCharCode(48 + b);       // 0-9
-  b -= 10;
-  if (b < 26) return String.fromCharCode(65 + b);       // A-Z
-  b -= 26;
-  if (b < 26) return String.fromCharCode(97 + b);       // a-z
-  b -= 26;
-  if (b === 0) return '-';
-  if (b === 1) return '_';
-  return '?';
-};
-
-const append3bytes = (b1, b2, b3) => {
-  const c1 = b1 >> 2;
-  const c2 = ((b1 & 0x3) << 4) | (b2 >> 4);
-  const c3 = ((b2 & 0xF) << 2) | (b3 >> 6);
-  const c4 = b3 & 0x3F;
-  return encode6bit(c1) + encode6bit(c2) + encode6bit(c3) + encode6bit(c4);
-};
-
-const encodePlantUML = (code) => {
+const prepareSvgHtml = (base64) => {
+  if (!base64) return null;
   try {
-    // Convert string to UTF-8 bytes
-    const utf8Bytes = new TextEncoder().encode(code);
-
-    // Compress using raw deflate (no zlib/gzip header)
-    const compressed = deflateRaw(utf8Bytes);
-
-    // Encode with PlantUML custom base64
-    let result = '';
-    for (let i = 0; i < compressed.length; i += 3) {
-      const b1 = compressed[i];
-      const b2 = i + 1 < compressed.length ? compressed[i + 1] : 0;
-      const b3 = i + 2 < compressed.length ? compressed[i + 2] : 0;
-      result += append3bytes(b1, b2, b3);
-    }
-    return result;
-  } catch (e) {
-    console.error('PlantUML encode error:', e);
+    const raw = atob(base64);
+    // Ensure the root <svg> has width="100%" height="100%" and a viewBox
+    const patched = raw.replace(
+      /<svg([^>]*)>/i,
+      (match, attrs) => {
+        // Extract existing viewBox if present
+        const hasViewBox = /viewBox/i.test(attrs);
+        // Extract original width/height to build a fallback viewBox
+        let vb = '';
+        if (!hasViewBox) {
+          const w = attrs.match(/width="([\d.]+)/i)?.[1] || '800';
+          const h = attrs.match(/height="([\d.]+)/i)?.[1] || '600';
+          vb = ` viewBox="0 0 ${w} ${h}"`;
+        }
+        // Strip fixed width/height, add 100% sizing
+        const cleaned = attrs
+          .replace(/width="[^"]*"/gi, '')
+          .replace(/height="[^"]*"/gi, '');
+        return `<svg${cleaned} width="100%" height="100%"${vb}>`;
+      }
+    );
+    return patched;
+  } catch {
     return null;
   }
 };
 
-/**
- * Build a simple PlantUML diagram from components array as fallback
- */
-const buildPlantUML = (components = []) => {
-  if (!components.length) return null;
-
-  const getUMLType = (type = '') => {
-    const t = type.toLowerCase();
-    if (t.includes('database') || t.includes('db')) return 'database';
-    if (t.includes('cache') || t.includes('storage')) return 'storage';
-    if (t.includes('gateway') || t.includes('proxy')) return 'boundary';
-    if (t.includes('ui') || t.includes('frontend') || t.includes('mobile')) return 'actor';
-    if (t.includes('queue') || t.includes('message')) return 'queue';
-    return 'component';
-  };
-
-  const nodes = components.map((c, i) => {
-    const id = `C${i}`;
-    const label = (c.name || 'Component').replace(/"/g, "'");
-    const umlType = getUMLType(c.type);
-    return `${umlType} "${label}" as ${id}`;
-  });
-
-  const arrows = components.slice(0, -1).map((_, i) => `C${i} --> C${i + 1}`);
-
-  return [
-    '@startuml',
-    '!theme plain',
-    'skinparam backgroundColor #FAFAFA',
-    'skinparam componentBackgroundColor #EEF2FF',
-    'skinparam componentBorderColor #6366F1',
-    'skinparam componentFontColor #1E1B4B',
-    'skinparam arrowColor #6366F1',
-    'skinparam databaseBackgroundColor #DCFCE7',
-    'skinparam databaseBorderColor #16A34A',
-    'skinparam actorBackgroundColor #FEF3C7',
-    'skinparam actorBorderColor #D97706',
-    '',
-    ...nodes,
-    '',
-    ...arrows,
-    '@enduml'
-  ].join('\n');
-};
-
 const DiagramView = ({ data }) => {
-  const [imgSrc, setImgSrc] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [imgError, setImgError] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const diagram = data?.diagram;
+  const svgBase64 = diagram?.image;
 
-  // Priority 1: base64 image from backend
-  const base64Image = data?.diagram?.image;
-  const mimeType = data?.diagram?.mime_type || 'image/png';
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const containerRef = useRef(null);
 
-  // Priority 2: PlantUML code from backend LLM response
-  const plantUMLCode = data?.architechure_diagram_code || data?.architecture_diagram_code;
+  // Decode & patch SVG once
+  const svgHtml = useMemo(() => prepareSvgHtml(svgBase64), [svgBase64]);
 
-  // Priority 3: auto-build from components
-  const fallbackCode = buildPlantUML(data?.architectural_components);
-
-  const diagramCode = plantUMLCode || fallbackCode;
-
+  // Listen for fullscreen change events
   useEffect(() => {
-    setLoading(true);
-    setImgError(false);
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
 
-    if (base64Image) {
-      setImgSrc(`data:${mimeType};base64,${base64Image}`);
-      setLoading(false);
-      return;
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
     }
+  }, []);
 
-    if (diagramCode) {
-      const encoded = encodePlantUML(diagramCode);
-      if (encoded) {
-        setImgSrc(`https://www.plantuml.com/plantuml/png/${encoded}`);
-      } else {
-        setImgError(true);
-      }
-      setLoading(false);
-      return;
-    }
+  const handleZoomIn = useCallback(() => setZoom(z => Math.min(z + 0.25, 4)), []);
+  const handleZoomOut = useCallback(() => setZoom(z => Math.max(z - 0.25, 0.25)), []);
+  const handleReset = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
 
-    setLoading(false);
-    setImgError(true);
-  }, [base64Image, diagramCode]);
+  // Mouse wheel zoom
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    setZoom(z => {
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      return Math.min(Math.max(z + delta, 0.25), 4);
+    });
+  }, []);
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(diagramCode || '');
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // Pan handlers
+  const handleMouseDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    setIsPanning(true);
+    setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  }, [pan]);
 
-  const handleDownload = () => {
-    if (!imgSrc) return;
+  const handleMouseMove = useCallback((e) => {
+    if (!isPanning) return;
+    setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
+  }, [isPanning, panStart]);
+
+  const handleMouseUp = useCallback(() => setIsPanning(false), []);
+
+  const handleDownload = useCallback(() => {
+    if (!svgBase64) return;
+    const svgText = atob(svgBase64);
+    const blob = new Blob([svgText], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = imgSrc;
-    a.download = 'architecture-diagram.png';
+    a.href = url;
+    a.download = `architecture-diagram-${Date.now()}.svg`;
     a.click();
-  };
+    URL.revokeObjectURL(url);
+  }, [svgBase64]);
 
-  if (!base64Image && !diagramCode) return null;
+  if (!svgHtml) return null;
 
   return (
     <div className="card animate-slide-up">
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h2 className="section-title">
           <span style={{ fontSize: 20 }}>🗺️</span>
@@ -168,67 +127,80 @@ const DiagramView = ({ data }) => {
             border: '1px solid var(--chip-border)',
             padding: '2px 10px', borderRadius: 9999,
           }}>
-            PlantUML
+            D2
           </span>
         </h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {diagramCode && (
-            <button onClick={handleCopy} className="btn-secondary" style={{ fontSize: 12 }}>
-              {copied ? '✅ Copied!' : '📋 Copy Code'}
-            </button>
-          )}
-          {imgSrc && !imgError && (
-            <button onClick={handleDownload} className="btn-secondary" style={{ fontSize: 12 }}>
-              ⬇️ Download
-            </button>
-          )}
-        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Scroll to zoom · Drag to pan</p>
       </div>
 
-      {/* Diagram area */}
-      <div style={{
-        background: 'var(--diagram-bg)',
-        borderRadius: 16,
-        padding: 24,
-        border: '1px solid var(--border)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: 200,
-        overflowX: 'auto',
-      }}>
-        {loading ? (
-          <div className="skeleton" style={{ height: 180, width: '100%' }} />
-        ) : imgError ? (
-          /* Fallback: simple flow boxes */
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
-            {(data?.architectural_components || []).map((c, i, arr) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  background: 'rgba(99,102,241,0.12)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--tag-text)',
-                  padding: '10px 18px',
-                  borderRadius: 12, fontSize: 13, fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                }}>
-                  {c.name}
-                </div>
-                {i < arr.length - 1 && (
-                  <span style={{ color: 'var(--text-muted)', fontSize: 18 }}>→</span>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <img
-            src={imgSrc}
-            alt="Architecture Diagram"
-            style={{ maxWidth: '100%', borderRadius: 8 }}
-            onLoad={() => setLoading(false)}
-            onError={() => { setImgError(true); setLoading(false); }}
-          />
-        )}
+      <div
+        ref={containerRef}
+        style={{
+          height: isFullscreen ? '100vh' : 600,
+          borderRadius: isFullscreen ? 0 : 16,
+          border: isFullscreen ? 'none' : '1px solid var(--border)',
+          overflow: 'hidden',
+          background: '#ffffff',
+          position: 'relative',
+          cursor: isPanning ? 'grabbing' : 'grab',
+          userSelect: 'none',
+        }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        {/* Inline SVG diagram */}
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: 'center center',
+            transition: isPanning ? 'none' : 'transform 0.15s ease',
+          }}
+          dangerouslySetInnerHTML={{ __html: svgHtml }}
+        />
+
+        {/* Zoom controls (bottom-left) */}
+        <div style={{ position: 'absolute', bottom: 12, left: 12, display: 'flex', flexDirection: 'column', gap: 4, zIndex: 10 }}>
+          <button onClick={handleZoomIn} style={{ ...btnStyle, padding: '6px 8px' }} title="Zoom in">
+            <ZoomIn size={16} />
+          </button>
+          <button onClick={handleZoomOut} style={{ ...btnStyle, padding: '6px 8px' }} title="Zoom out">
+            <ZoomOut size={16} />
+          </button>
+          <button onClick={handleReset} style={{ ...btnStyle, padding: '6px 8px' }} title="Reset view">
+            <RotateCcw size={16} />
+          </button>
+        </div>
+
+        {/* Toolbar buttons (top-right) */}
+        <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, zIndex: 10 }}>
+          <span style={{ ...btnStyle, cursor: 'default', color: '#6b7280', fontWeight: 500 }}>
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            onClick={handleDownload}
+            style={btnStyle}
+            title="Download SVG"
+            onMouseEnter={e => { e.currentTarget.style.background = '#f3f4f6'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+          >
+            <Download size={14} /> Export
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            style={btnStyle}
+            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            onMouseEnter={e => { e.currentTarget.style.background = '#f3f4f6'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+          >
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            {isFullscreen ? 'Exit' : 'Fullscreen'}
+          </button>
+        </div>
       </div>
     </div>
   );
